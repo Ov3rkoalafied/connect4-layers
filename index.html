@@ -198,9 +198,9 @@
     /* Layer 2 piece — sits on top with a distinct ring */
     .cell .piece-l2 {
       position: absolute;
-      inset: 12px;
+      inset: 5px;
       border-radius: 50%;
-      border: 3px solid rgba(255,255,255,0.85);
+      border: 2px solid rgba(255,255,255,0.85);
       box-shadow: 0 0 10px rgba(255,255,255,0.5), inset 0 0 6px rgba(0,0,0,0.3);
       transition: background 0.15s;
     }
@@ -215,17 +215,8 @@
       box-shadow: 0 0 18px 6px rgba(255,255,255,0.7);
     }
 
-    /* Layer 2 placement mode — occupied cells become clickable targets */
-    body.l2-mode .cell.occupied {
-      cursor: crosshair;
-    }
-
-    body.l2-mode .cell.occupied:hover {
-      transform: scale(1.08);
-    }
-
-    /* Normal mode — column arrows active */
-    body:not(.l2-mode) .col-arrow {
+    /* Column arrows always clickable */
+    .col-arrow {
       cursor: pointer;
     }
 
@@ -333,6 +324,14 @@
     return -1;
   }
 
+  // Lowest available layer-2 slot in a column (must have l1, must not have l2 already)
+  function dropRowL2(col) {
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (board[col][r].l1 !== null && board[col][r].l2 === null) return r;
+    }
+    return -1;
+  }
+
   // ── Win detection ─────────────────────────────────────
 
   function checkWin() {
@@ -383,11 +382,11 @@
     afterMove();
   }
 
-  function placeL2(col, row) {
+  function dropL2(col) {
     if (gameOver || !l2Mode) return;
-    if (!isOccupied(col, row)) return;
-    if (board[col][row].l2 !== null) return; // already has l2
     if (l2Remaining[currentPlayer] <= 0) return;
+    const row = dropRowL2(col);
+    if (row === -1) return; // no valid slot in this column
     board[col][row].l2 = currentPlayer;
     l2Remaining[currentPlayer]--;
     l2Mode = false;
@@ -436,13 +435,13 @@
 
     const winCells = new Set(winLine ? winLine.map(([c,r]) => `${c},${r}`) : []);
 
-    // Column arrows (row 0 = visual top, which is array index 0)
+    // Column arrows — work for both layer 1 and layer 2 modes
     for (let c = 0; c < COLS; c++) {
       const arrow = document.createElement('div');
       arrow.className = 'col-arrow';
       arrow.textContent = '▼';
-      if (!gameOver && !l2Mode) {
-        arrow.addEventListener('click', () => dropPiece(c));
+      if (!gameOver) {
+        arrow.addEventListener('click', () => l2Mode ? dropL2(c) : dropPiece(c));
       }
       arrowsEl.appendChild(arrow);
     }
@@ -471,13 +470,9 @@
           cell.classList.add('winner-cell');
         }
 
-        // Click handlers
+        // Clicking a cell also triggers a column drop (same as the arrow)
         if (!gameOver) {
-          if (l2Mode && data.l1 !== null && data.l2 === null) {
-            cell.addEventListener('click', () => placeL2(c, r));
-          } else if (!l2Mode) {
-            cell.addEventListener('click', () => dropPiece(c));
-          }
+          cell.addEventListener('click', () => l2Mode ? dropL2(c) : dropPiece(c));
         }
 
         boardEl.appendChild(cell);
@@ -504,7 +499,7 @@
       turnEl.style.display = 'block';
       winnerEl.style.display = 'none';
       const color = currentPlayer === 1 ? '#e63946' : '#f4d03f';
-      const modeText = l2Mode ? ' — Layer 2 mode: click a cell to cover it' : '';
+      const modeText = l2Mode ? ' — Layer 2 mode: select a column to drop' : '';
       turnEl.innerHTML = `<span style="color:${color}">Player ${currentPlayer}'s turn</span>${modeText}`;
     }
   }
